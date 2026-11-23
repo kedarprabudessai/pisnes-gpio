@@ -55,6 +55,7 @@
 
 #include "keys.h"
 #include "keyconstants.h"
+#include "gpio_buttons.h"
 
 #undef USE_THREADS
 #define USE_THREADS
@@ -425,6 +426,7 @@ void S9xExit ()
 	pthread_join(thread, NULL);
 	alsa_free(g_alsa);
 	S9xDeinitDisplay ();
+	gpio_buttons_close();
 	Memory.SaveSRAM (S9xGetFilename (".srm"));
 //    S9xSaveCheatFile (S9xGetFilename (".cht"));
 	Memory.Deinit ();
@@ -447,6 +449,9 @@ void S9xInitInputDevices ()
 
     //Open config file for reading below
     open_config_file();
+
+    //Initialize direct memory-mapped GPIO buttons from config
+    gpio_buttons_init(gkeyfile);
 
     //Configure keys from config file or defaults
     sfc_key[A_1] = get_integer_conf("Keyboard", "A_1", RPI_KEY_A);
@@ -831,13 +836,15 @@ void S9xSyncSpeed ()
 	}
 
 	//This isn't required now as the vsync is in effect for GLES2
-	// Delay until we're completed this frame.
-	// Can't use setitimer because the sound code already could be using it. We don't actually need it either.
+	// Delay until we've completed this frame if running ahead of schedule.
 	while (timercmp(&next1, &now, >))
 	{
-		// If we're ahead of time, sleep a while.
-		while (gettimeofday(&now, NULL) == -1) ;
-		// Continue with a while-loop because usleep() could be interrupted by a signal.
+		long diff_us = (next1.tv_sec - now.tv_sec) * 1000000 + (next1.tv_usec - now.tv_usec);
+		if (diff_us > 1500)
+			usleep(diff_us - 1000);
+		else if (diff_us > 0)
+			usleep(100);
+		gettimeofday(&now, NULL);
 	}
 
 	// Calculate the timestamp of the next frame.
@@ -1150,6 +1157,12 @@ uint32 S9xReadJoypad (int which1)
 	if(which1 > 1) return val;
 
 	if(which1 == 0) {
+		int gpio_quit = 0;
+		if (g_gpio_cfg.enabled) {
+			val |= gpio_buttons_read(&gpio_quit);
+			if (gpio_quit) S9xExit();
+		}
+
 		// Handle keyboard and first joystick as the same player/controls
 		if (keyssnes[sfc_key[L_1]] == SDL_PRESSED || joy_buttons[which1][sfc_joy[L_1]])		val |= SNES_TL_MASK;
 		if (keyssnes[sfc_key[R_1]] == SDL_PRESSED || joy_buttons[which1][sfc_joy[R_1]])		val |= SNES_TR_MASK;

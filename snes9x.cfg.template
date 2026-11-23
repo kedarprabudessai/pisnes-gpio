@@ -77,3 +77,24 @@ APUEnabled=1
 SoundPlaybackRate=7
 # Enable on RPI2 for clearer sound, disable on RPI1 due to performance impact
 InterpolatedSound=0
+
+[GPIO]
+# Direct memory-mapped GPIO button input via /dev/gpiomem (zero latency, no uinput daemon needed)
+# Set Enabled=1 to read buttons directly from the Raspberry Pi 40-pin header
+Enabled=1
+# BCM GPIO pin numbers connected to momentary switches (active-low, pin to GND)
+# Safe default pins that avoid I2C, SPI, and PWM audio pins (GPIO 18/19):
+UP=6
+DOWN=13
+LEFT=19
+RIGHT=26
+A=4
+B=17
+X=27
+Y=22
+L=10
+R=9
+START=11
+SELECT=5
+# Dedicated quit pin (-1 to disable). Pressing START + SELECT together also quits.
+QUIT=21

@@ -35,7 +35,7 @@ OBJECTS=$(CPUOBJ) $(FXOBJ) $(C4OBJ) \
 	memmap.o ppu.o dma.o unix/unix.o \
 	$(SOUNDOBJ) unix/graphics.o dsp1.o \
     snes9x.o snapshot.o data.o globals.o \
-	unix/gles2.o \
+	unix/gles2.o unix/gpio_buttons.o \
 	$(KREEDOBJ)
 
 ifdef NETPLAY
@@ -68,8 +68,8 @@ INCLUDES=-I/usr/include -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthre
     -I/opt/vc/include/interface/vmcs_host/linux 
 
 
-#OPTIMISE= -D_ZAURUS -O3 -march=armv6zk -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -mfpu=vfp -mfloat-abi=hard -ffast-math -fstrict-aliasing -fomit-frame-pointer 
-OPTIMISE= -D_ZAURUS -O3 -march=armv6 -mfpu=vfp -mfloat-abi=hard -ffast-math -fstrict-aliasing -fomit-frame-pointer 
+# Pi Zero (BCM2835 ARM1176JZF-S) optimized flags
+OPTIMISE= -D_ZAURUS -O3 -march=armv6zk -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -mfpu=vfp -mfloat-abi=hard -ffast-math -fstrict-aliasing -fomit-frame-pointer 
 
 CCFLAGS = $(OPTIMISE) \
 -I/usr/include \
@@ -106,8 +106,8 @@ all: snes9x snes9x.gui
 snes9x: $(OBJECTS) 
 	$(CC) $(INCLUDES) -o $@ $(OBJECTS) $(EXTRALIBS) $(LDLIBS) -lSDL -lstdc++ -lz -lpthread 
 
-snes9x.gui: unix/frontend.o
-	$(CC) $(INCLUDES) -o $@ unix/frontend.o $(EXTRALIBS) $(LDLIBS) -lSDL -lstdc++ -lz -lpthread 
+snes9x.gui: unix/frontend.o unix/gpio_buttons.o
+	$(CC) $(INCLUDES) -o $@ unix/frontend.o unix/gpio_buttons.o $(EXTRALIBS) $(LDLIBS) -lSDL -lstdc++ -lz -lpthread 
 
 .cpp.o:
 	$(CCC) $(INCLUDES) -c $(CCFLAGS) $*.cpp -o $@
@@ -131,7 +131,7 @@ snes9x.gui: unix/frontend.o
 	$(NASM) -f elf $(FXDEFINES) -i . -i i386 -o $@ $*.asm
 
 clean:
-	rm -f $(OBJECTS) offsets.o unix/unix.o unix/graphics.o unix/frontend.o
+	rm -f $(OBJECTS) offsets.o unix/unix.o unix/graphics.o unix/frontend.o unix/gpio_buttons.o
 #release: CCFLAGS += -DNO_DEBUGGER
 
 release: clean all

@@ -14,6 +14,7 @@
 
 #include "keyconstants.h"
 #include "keys.h"
+#include "gpio_buttons.h"
 
 static int game_num_avail=0;
 static int last_game_selected=0;
@@ -340,6 +341,7 @@ static void game_list_select (int index, char *game)
 
 static void fe_exit(void)
 {
+	gpio_buttons_close();
 	free(fe_menu_bmp);
 	frontend_deinit();
 	exit(0);
@@ -432,6 +434,12 @@ static uint32 fe_ReadJoypad (int which1)
 {
 	uint32 val=0x80000000;
 
+	int gpio_quit = 0;
+	if (g_gpio_cfg.enabled) {
+		val |= gpio_buttons_read(&gpio_quit);
+		if (gpio_quit) fe_exit();
+	}
+
 	if (keyssnes[sfc_key[A_1]] == SDL_PRESSED || joy_buttons[sfc_joy[A_1]])		val |= SNES_A_MASK;
 	if (keyssnes[sfc_key[B_1]] == SDL_PRESSED || joy_buttons[sfc_joy[B_1]])		val |= SNES_B_MASK;
 	if (keyssnes[sfc_key[START_1]] == SDL_PRESSED || joy_buttons[sfc_joy[START_1]])	val |= SNES_START_MASK;
@@ -499,6 +507,9 @@ static void fe_S9xInitInputDevices ()
 
 	//Open config file to read joystick values below
 	open_config_file();
+
+	//Initialize direct memory-mapped GPIO buttons from config
+	gpio_buttons_init(gkeyfile);
 
 	//Configure keys from config file or defaults
 	sfc_key[A_1] = get_keyjoy_conf("Keyboard", "A_1", RPI_KEY_A);

@@ -345,13 +345,17 @@ static void gles2_DrawQuad(const ShaderInfo *sh, GLuint textures[2])
 {
 	glUniform1i(sh->u_texture, 0); SHOW_ERROR
 
-	if (Settings.DisplaySmoothStretch) {
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); SHOW_ERROR 
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); SHOW_ERROR
-	}
-	else {
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); SHOW_ERROR 
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); SHOW_ERROR
+	static int last_smooth = -1;
+	if (Settings.DisplaySmoothStretch != last_smooth) {
+		last_smooth = Settings.DisplaySmoothStretch;
+		if (last_smooth) {
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); SHOW_ERROR 
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); SHOW_ERROR
+		}
+		else {
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); SHOW_ERROR 
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); SHOW_ERROR
+		}
 	}
 
 	glBindBuffer(GL_ARRAY_BUFFER, buffers[0]); SHOW_ERROR
