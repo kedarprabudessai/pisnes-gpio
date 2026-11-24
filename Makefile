@@ -64,7 +64,7 @@ CCC = g++
 CC = gcc
 NASM = nasm
 
-INCLUDES=-I/usr/include -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads \
+INCLUDES=-I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads \
     -I/opt/vc/include/interface/vmcs_host/linux 
 
 
@@ -72,7 +72,6 @@ INCLUDES=-I/usr/include -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthre
 OPTIMISE= -D_ZAURUS -O3 -march=armv6zk -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -mfpu=vfp -mfloat-abi=hard -ffast-math -fstrict-aliasing -fomit-frame-pointer 
 
 CCFLAGS = $(OPTIMISE) \
--I/usr/include \
 -I/usr/include/SDL \
 -I. \
 -Iunzip \

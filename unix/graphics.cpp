@@ -65,6 +65,14 @@
 #include <EGL/eglext.h>
 #include <assert.h>
 
+#ifndef EGL_DISPMANX_WINDOW_T
+typedef struct {
+   DISPMANX_ELEMENT_HANDLE_T element;
+   int width;
+   int height;
+} EGL_DISPMANX_WINDOW_T;
+#endif
+
 
 #define COUNT(a) (sizeof(a) / sizeof(a[0]))
 
