@@ -279,7 +279,7 @@ static void game_list_init_nocache(void)
 				if (strcasecmp(namelist[i]->d_name, "dir.txt") != 0)
 					strcpy(fe_drivers[game_num_avail++].name,  namelist[i]->d_name);
 			}
-			free(namelist[n]);
+			free(namelist[i]);
 		}
 		free(namelist);
 	}
@@ -688,6 +688,8 @@ int main (int argc, char **argv)
 	
 		if (game_num_avail==0)
 		{
+			printf("\n[GUI] ERROR: No games found in 'roms/' directory!\n");
+			printf("[GUI] Please place your SNES ROM files (.smc, .sfc, or .zip) inside 'roms/'.\n\n");
 			/* Draw background image */
 	    	show_bmp_16bpp(fe_screen, fe_menu_bmp);
 			fe_gamelist_text_out(35, 110, "ERROR: NO AVAILABLE GAMES FOUND",color16(255,255,255));
