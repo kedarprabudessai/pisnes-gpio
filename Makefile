@@ -85,6 +85,7 @@ CCFLAGS = $(OPTIMISE) \
 -DSPC700_SHUTDOWN \
 -fpermissive \
 -Wno-write-strings \
+-Wno-narrowing \
 $(CPUDEFINES) \
 $(SOUNDDEFINES) \
 $(NETPLAYDEFINES) \
