@@ -575,8 +575,6 @@ static unsigned long fe_timer_read(void)
 
 static void select_game(char *game)
 {
-	extern int kiosk_mode;
-
 	uint32 Joypads;
 
 	unsigned long keytimer=0;

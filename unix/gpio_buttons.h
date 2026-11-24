@@ -1,13 +1,12 @@
 #ifndef _GPIO_BUTTONS_H_
 #define _GPIO_BUTTONS_H_
 
+#include <glib.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-typedef struct _GKeyFile GKeyFile;
 
 typedef struct {
     int enabled;
