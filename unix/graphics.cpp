@@ -205,6 +205,10 @@ void S9xInitDisplay (int height)
     
     	// initialize the EGL display connection
     	EGLBoolean result = eglInitialize(display, NULL, NULL);
+    	if (result == EGL_FALSE) {
+    		printf("[EGL] eglInitialize failed! EGL error: 0x%04x\n", eglGetError());
+    		printf("[EGL] Check that 'gpu_mem=128' is in /boot/config.txt and 'dtoverlay=vc4-kms-v3d' is disabled.\n");
+    	}
     	assert(EGL_FALSE != result);
     
     	// get an appropriate EGL frame buffer configuration
