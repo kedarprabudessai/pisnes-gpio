@@ -611,8 +611,8 @@ static void select_game(char *game)
 				break;
 			}
 
-			//Game selected
-			if(Joypads & SNES_START_MASK || Joypads & SNES_B_MASK) break;
+			//Game selected (Start, B, or A button)
+			if(Joypads & (SNES_START_MASK | SNES_B_MASK | SNES_A_MASK)) break;
 
 			//Used to delay the initial key press, but 
 			//once pressed and held the delay will clear
@@ -633,7 +633,7 @@ static void select_game(char *game)
 			if(Joypads & SNES_RIGHT_MASK) last_game_selected+=21;
 		}
 
-		if(Joypads & SNES_START_MASK || Joypads & SNES_B_MASK)
+		if(Joypads & (SNES_START_MASK | SNES_B_MASK | SNES_A_MASK))
 		{
 			/* Select the game */
 			game_list_select(last_game_selected, game);
@@ -710,8 +710,10 @@ int main (int argc, char **argv)
 
 		//Run the actual game
 		//Using system seems to work better with snes9x
+		printf("\n[GUI] Launching game: %s\n", playgame);
 		sprintf(gamename, "./snes9x %s \"roms/%s\"", options, playgame);
-		system(gamename);
+		int ret = system(gamename);
+		printf("[GUI] Game exited (code %d)\n\n", ret);
 
 		usleep(500000);
 	    
