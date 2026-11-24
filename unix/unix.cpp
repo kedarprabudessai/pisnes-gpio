@@ -422,9 +422,12 @@ void S9xAutoSaveSRAM ()
 void S9xExit ()
 {
 	S9xSetSoundMute (TRUE);
-	g_alsa->thread_running=0;
-	pthread_join(thread, NULL);
-	alsa_free(g_alsa);
+	if (g_alsa) {
+		g_alsa->thread_running=0;
+		pthread_join(thread, NULL);
+		alsa_free(g_alsa);
+		g_alsa = NULL;
+	}
 	S9xDeinitDisplay ();
 	gpio_buttons_close();
 	Memory.SaveSRAM (S9xGetFilename (".srm"));
@@ -760,6 +763,12 @@ void InitTimer ()
 {
 	//Open sound device and start ALSA sound thread
 	g_alsa = alsa_init();	
+	if (!g_alsa)
+	{
+		printf("[ALSA] Audio device unavailable. Running with sound disabled.\n");
+		S9xSetSoundMute(TRUE);
+		return;
+	}
 
 	g_alsa->thread_running = 1;
 	pthread_create (&thread, NULL, S9xProcessSound, NULL);
@@ -1082,7 +1091,11 @@ static alsa_t *alsa_init(void)
 	
 	snd_pcm_uframes_t buffer_size_frames;
 	
-	TRY_ALSA(snd_pcm_open(&alsa->pcm, alsa_dev, SND_PCM_STREAM_PLAYBACK, 0));
+	int alsa_open_err = snd_pcm_open(&alsa->pcm, alsa_dev, SND_PCM_STREAM_PLAYBACK, 0);
+	if (alsa_open_err < 0) {
+		alsa_dev = "plughw:0,0";
+		TRY_ALSA(snd_pcm_open(&alsa->pcm, alsa_dev, SND_PCM_STREAM_PLAYBACK, 0));
+	}
 
 	//latency is one frame times by a multiplier (higher improves crackling?)
 	TRY_ALSA(snd_pcm_set_params(alsa->pcm,
