@@ -74,6 +74,7 @@ DISPMANX_RESOURCE_HANDLE_T resource_bg;
 DISPMANX_RESOURCE_HANDLE_T dispman_resource;
 static VC_RECT_T dispman_dst_rect;
 static int dispman_last_height = 0;
+static int dispman_initialized = 0;
 
 //sq SDL_Surface *screen, *gfxscreen;
 SDL_Surface *gfxscreen;
@@ -87,6 +88,9 @@ uint32_t display_width, display_height;
 
 void dispmanx_draw(short *scr, int width, int height)
 {
+	if (!dispman_initialized || !scr || height <= 0) return;
+	if (height > 240) height = 240;
+
 	VC_RECT_T write_rect;
 	vc_dispmanx_rect_set(&write_rect, 0, 0, width, height);
 	vc_dispmanx_resource_write_data(dispman_resource, VC_IMAGE_RGB565, width * 2, scr, &write_rect);
@@ -96,10 +100,10 @@ void dispmanx_draw(short *scr, int width, int height)
 		VC_RECT_T src_rect;
 		vc_dispmanx_rect_set(&src_rect, 0, 0, width << 16, height << 16);
 		vc_dispmanx_element_change_attributes(update, dispman_element,
-			1 << 3 /* CHANGE_SRC_RECT */, 0, 0, NULL, &src_rect, 0, (DISPMANX_TRANSFORM_T)0);
+			1 << 3 /* ELEMENT_CHANGE_SRC_RECT */, 0, 0, NULL, &src_rect, 0, (DISPMANX_TRANSFORM_T)0);
 		dispman_last_height = height;
 	}
-	vc_dispmanx_element_modified(update, dispman_element, &dispman_dst_rect);
+	vc_dispmanx_element_modified(update, dispman_element, NULL);
 	vc_dispmanx_update_submit_sync(update);
 }
 
@@ -261,6 +265,7 @@ void S9xInitDisplay (int height)
                                 (DISPMANX_TRANSFORM_T) 0);
 
     	vc_dispmanx_update_submit_sync(dispman_update);
+    	dispman_initialized = 1;
     }
 
 }
@@ -269,29 +274,37 @@ void S9xDeinitDisplay ()
 {
 	int ret;
 	int i;
-	free(screen);
+	if (screen) {
+		free(screen);
+		screen = NULL;
+	}
 
 	for(i=0;i<2;i++)
 	{
-		if(SDL_JoystickOpened(i))
-			SDL_JoystickClose(joy[i]); // Should this go here? WHO KNOWS
+		if(joy[i] && SDL_JoystickOpened(i)) {
+			SDL_JoystickClose(joy[i]);
+			joy[i] = NULL;
+		}
 	}
 
 	SDL_Quit();
 
-	dispman_update = vc_dispmanx_update_start( 0 );
-	ret = vc_dispmanx_element_remove( dispman_update, dispman_element );
-	ret = vc_dispmanx_element_remove( dispman_update, dispman_element_bg );
-	ret = vc_dispmanx_update_submit_sync( dispman_update );
-	ret = vc_dispmanx_resource_delete( dispman_resource );
-	ret = vc_dispmanx_resource_delete( resource_bg );
-	ret = vc_dispmanx_display_close( dispman_display );
+	if (dispman_initialized) {
+		dispman_update = vc_dispmanx_update_start( 0 );
+		ret = vc_dispmanx_element_remove( dispman_update, dispman_element );
+		ret = vc_dispmanx_element_remove( dispman_update, dispman_element_bg );
+		ret = vc_dispmanx_update_submit_sync( dispman_update );
+		ret = vc_dispmanx_resource_delete( dispman_resource );
+		ret = vc_dispmanx_resource_delete( resource_bg );
+		ret = vc_dispmanx_display_close( dispman_display );
+		bcm_host_deinit();
+		dispman_initialized = 0;
+	}
 
-    bcm_host_deinit();
-
-	free(GFX.SubScreen);
-	free(GFX.ZBuffer);
-	free(GFX.SubZBuffer);
+	if (GFX.SubScreen) { free(GFX.SubScreen); GFX.SubScreen = NULL; }
+	if (GFX.ZBuffer) { free(GFX.ZBuffer); GFX.ZBuffer = NULL; }
+	if (GFX.SubZBuffer) { free(GFX.SubZBuffer); GFX.SubZBuffer = NULL; }
+	if (RGBconvert) { free(RGBconvert); RGBconvert = NULL; }
 }
 
 void S9xSetPalette ()

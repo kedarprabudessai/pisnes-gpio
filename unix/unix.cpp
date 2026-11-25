@@ -117,7 +117,7 @@ static void alsa_free(void *data);
 uint8 *keyssnes;
 int OldSkipFrame;
 
-uint8 joy_buttons[2][32];
+uint8 joy_buttons[2][256];
 uint8 joy_axes[2][8];
 
 int joyaxis_LR, joyaxis_UD;
@@ -441,10 +441,10 @@ static Uint16 sfc_joy[NUMKEYS];
 
 void S9xInitInputDevices ()
 {
-    memset(joy_buttons, 0, 32*2);
-    memset(joy_axes, 0, 8*2);
-    memset(sfc_key, 0, NUMKEYS*2);
-    memset(sfc_joy, 0, NUMKEYS*2);
+    memset(joy_buttons, 0, sizeof(joy_buttons));
+    memset(joy_axes, 0, sizeof(joy_axes));
+    memset(sfc_key, 0, sizeof(sfc_key));
+    memset(sfc_joy, 0, sizeof(sfc_joy));
 
     //Open config file for reading below
     open_config_file();
@@ -766,11 +766,12 @@ void InitTimer ()
 	}
 
 	g_alsa->thread_running = 1;
-	pthread_create (&thread, NULL, S9xProcessSound, NULL);
-	if(!thread)
+	if (pthread_create(&thread, NULL, S9xProcessSound, NULL) != 0)
 	{
 		printf("error initializing ALSA thread\n");
-		exit(1);
+		alsa_free(g_alsa);
+		g_alsa = NULL;
+		S9xSetSoundMute(TRUE);
 	}
 }
 
@@ -824,18 +825,15 @@ void S9xSyncSpeed ()
 
 	if (IPPU.RenderThisFrame)
 		IPPU.SkippedFrames = 0;
-	else
+
+	// If we were behind schedule by >= 0.5s (e.g. startup or snapshot load),
+	// reset next1 so the emulator does not fast-forward to catch up.
+	if (timercmp(&next1, &now, <))
 	{
-		// If we were behind the schedule, check how much it is.
-		if (timercmp(&next1, &now, <))
+		unsigned lag = (now.tv_sec - next1.tv_sec) * 1000000 + now.tv_usec - next1.tv_usec;
+		if (lag >= 500000)
 		{
-			unsigned	lag = (now.tv_sec - next1.tv_sec) * 1000000 + now.tv_usec - next1.tv_usec;
-			if (lag >= 500000)
-			{
-				// More than a half-second behind means probably pause.
-				// The next line prevents the magic fast-forward effect.
-				next1 = now;
-			}
+			next1 = now;
 		}
 	}
 
@@ -868,13 +866,14 @@ void S9xProcessEvents (bool8_32 block)
 {
 	uint32 num = 0, i;
 	static bool8_32 TURBO = FALSE;
-	int hatmovement=0;
 
 	//Process two joysticks
 	for(i=0;i<2;i++) {
 		joy_axes[i][JOYLR] = CENTER;
 		joy_axes[i][JOYUD] = CENTER;
+		if (!joy[i]) continue;
 
+		int hatmovement=0;
 		if(SDL_JoystickNumHats(joy[i]) > 0) {
         	Uint8 hat = SDL_JoystickGetHat(joy[i], 0);
 			if (hat != 0) {
@@ -919,10 +918,12 @@ void S9xProcessEvents (bool8_32 block)
 	while(SDL_PollEvent(&event)) {
 		switch(event.type) {
 		case SDL_JOYBUTTONDOWN:
-			joy_buttons[event.jbutton.which][event.jbutton.button] = 1;
+			if (event.jbutton.which < 2 && event.jbutton.button < 256)
+				joy_buttons[event.jbutton.which][event.jbutton.button] = 1;
 			break;
 		case SDL_JOYBUTTONUP:
-			joy_buttons[event.jbutton.which][event.jbutton.button] = 0;
+			if (event.jbutton.which < 2 && event.jbutton.button < 256)
+				joy_buttons[event.jbutton.which][event.jbutton.button] = 0;
 			break;
 		case SDL_KEYDOWN:
 			keyssnes = SDL_GetKeyState(NULL);

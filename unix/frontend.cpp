@@ -349,7 +349,7 @@ static void fe_exit(void)
 
 SDL_Joystick *joy[2];
 
-uint8 joy_buttons[32];
+uint8 joy_buttons[256];
 uint8 joy_axes[2][8];
 
 int joyaxis_LR, joyaxis_UD;
@@ -370,6 +370,7 @@ static void fe_ProcessEvents (void)
 	for(i=0;i<1;i++) {
 		joy_axes[i][JOYLR] = CENTER;
 		joy_axes[i][JOYUD] = CENTER;
+		if (!joy[i]) continue;
 
 		if(SDL_JoystickNumHats(joy[i]) > 0) {
         	Uint8 hat = SDL_JoystickGetHat(joy[i], 0);
@@ -414,10 +415,12 @@ static void fe_ProcessEvents (void)
 	while(SDL_PollEvent(&event)) {
 		switch(event.type) {
 		case SDL_JOYBUTTONDOWN:
-			joy_buttons[event.jbutton.button] = 1;
+			if (event.jbutton.button < 256)
+				joy_buttons[event.jbutton.button] = 1;
 			break;
 		case SDL_JOYBUTTONUP:
-			joy_buttons[event.jbutton.button] = 0;
+			if (event.jbutton.button < 256)
+				joy_buttons[event.jbutton.button] = 0;
 			break;
 		case SDL_KEYDOWN:
 			keyssnes = SDL_GetKeyState(NULL);
@@ -500,10 +503,10 @@ static int get_keyjoy_conf (char *section, char *option, int defval)
 
 static void fe_S9xInitInputDevices ()
 {
-	memset(joy_buttons, 0, 32);
-	memset(joy_axes, 0, 8*2);
-	memset(sfc_key, 0, NUMKEYS*2);
-	memset(sfc_joy, 0, NUMKEYS*2);
+	memset(joy_buttons, 0, sizeof(joy_buttons));
+	memset(joy_axes, 0, sizeof(joy_axes));
+	memset(sfc_key, 0, sizeof(sfc_key));
+	memset(sfc_joy, 0, sizeof(sfc_joy));
 
 	//Open config file to read joystick values below
 	open_config_file();
@@ -708,6 +711,9 @@ int main (int argc, char **argv)
         preview_deinit();
         vc_dispmanx_update_submit_sync( fe_update );
 
+		//Release GPIO before handing control to emulator
+		gpio_buttons_close();
+
 		//Run the actual game
 		//Using system seems to work better with snes9x
 		printf("\n[GUI] Launching game: %s\n", playgame);
@@ -886,9 +892,12 @@ static void frontend_display(int gameid)
 
     // Load and display game preview image if one exists
     if(gameid >= 0) {
-        strcpy(filestr,"preview/");
-        strncat(filestr, fe_drivers[gameid].name, strlen(fe_drivers[gameid].name)-4);
-        strcat(filestr, ".jpg");
+        size_t namelen = strlen(fe_drivers[gameid].name);
+        size_t baselen = (namelen > 4) ? (namelen - 4) : namelen;
+        if (baselen > sizeof(filestr) - 14) baselen = sizeof(filestr) - 14;
+        memcpy(filestr, "preview/", 8);
+        memcpy(filestr + 8, fe_drivers[gameid].name, baselen);
+        strcpy(filestr + 8 + baselen, ".jpg");
 
         preview_deinit();   //destroy preview element as loadJPEG will create a new one
         if(!loadJPEG(filestr)) {

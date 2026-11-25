@@ -24,9 +24,22 @@
 #define SNES_B_MASK         (1 << 15)
 #endif
 
+// BCM2835 GPIO register word offsets (within 4KB page at 0x20200000)
+#define BCM_GPIO_GPLEV0     13  // 0x34
+#define BCM_GPIO_GPPUD      37  // 0x94
+#define BCM_GPIO_GPPUDCLK0  38  // 0x98
+
+typedef struct {
+    uint32_t pin_mask;
+    uint32_t snes_mask;
+} gpio_binding_t;
+
 gpio_config_t g_gpio_cfg;
 static volatile uint32_t *gpio_mmap_ptr = NULL;
 static int gpio_mem_fd = -1;
+static gpio_binding_t gpio_bindings[12];
+static int num_gpio_bindings = 0;
+static uint32_t gpio_quit_mask = 0;
 
 static int get_gpio_conf(GKeyFile *keyfile, const char *option, int defval)
 {
@@ -35,24 +48,34 @@ static int get_gpio_conf(GKeyFile *keyfile, const char *option, int defval)
     int val = g_key_file_get_integer(keyfile, "GPIO", option, &error);
     if (!error)
         return val;
-    if (error)
-        g_error_free(error);
+    g_error_free(error);
     return defval;
 }
 
-// Configure a GPIO pin as input in GPFSEL register (bits 000)
-static void set_gpio_input(int pin)
+static void add_binding(int pin, uint32_t snes_mask, uint32_t *all_pins_mask)
 {
-    if (gpio_mmap_ptr == NULL || pin < 0 || pin >= 32) return;
+    if (pin < 0 || pin >= 32) return;
+    // Configure pin as input in GPFSEL register (3 bits = 000)
     int reg_idx = pin / 10;
     int shift = (pin % 10) * 3;
-    // Set 3 bits to 000 (input mode)
     gpio_mmap_ptr[reg_idx] &= ~(7u << shift);
+
+    uint32_t bit = (1u << pin);
+    *all_pins_mask |= bit;
+    if (num_gpio_bindings < (int)(sizeof(gpio_bindings) / sizeof(gpio_bindings[0]))) {
+        gpio_bindings[num_gpio_bindings].pin_mask = bit;
+        gpio_bindings[num_gpio_bindings].snes_mask = snes_mask;
+        num_gpio_bindings++;
+    }
 }
 
 void gpio_buttons_init(GKeyFile *keyfile)
 {
+    // Close any prior mapping so repeated init calls (e.g. GUI loop) never leak fds
+    gpio_buttons_close();
     memset(&g_gpio_cfg, 0, sizeof(g_gpio_cfg));
+    num_gpio_bindings = 0;
+    gpio_quit_mask = 0;
 
     // Default pin mapping (safe pins on Raspberry Pi 40-pin header)
     g_gpio_cfg.enabled = get_gpio_conf(keyfile, "Enabled", 0);
@@ -74,10 +97,12 @@ void gpio_buttons_init(GKeyFile *keyfile)
         return;
     }
 
-    gpio_mem_fd = open("/dev/gpiomem", O_RDWR | O_SYNC);
+    const char *dev_name = "/dev/gpiomem";
+    gpio_mem_fd = open(dev_name, O_RDWR | O_SYNC);
     if (gpio_mem_fd < 0) {
         // Fallback to /dev/mem if /dev/gpiomem is unavailable (requires root)
-        gpio_mem_fd = open("/dev/mem", O_RDWR | O_SYNC);
+        dev_name = "/dev/mem";
+        gpio_mem_fd = open(dev_name, O_RDWR | O_SYNC);
         if (gpio_mem_fd < 0) {
             printf("[GPIO] Notice: /dev/gpiomem could not be opened. Direct GPIO input disabled.\n");
             g_gpio_cfg.enabled = 0;
@@ -93,30 +118,48 @@ void gpio_buttons_init(GKeyFile *keyfile)
     if (gpio_mmap_ptr == MAP_FAILED || gpio_mmap_ptr == NULL) {
         printf("[GPIO] mmap failed. Direct GPIO input disabled.\n");
         gpio_mmap_ptr = NULL;
-        if (gpio_mem_fd >= 0) {
-            close(gpio_mem_fd);
-            gpio_mem_fd = -1;
-        }
+        close(gpio_mem_fd);
+        gpio_mem_fd = -1;
         g_gpio_cfg.enabled = 0;
         return;
     }
 
-    // Configure all assigned pins as inputs
-    set_gpio_input(g_gpio_cfg.up);
-    set_gpio_input(g_gpio_cfg.down);
-    set_gpio_input(g_gpio_cfg.left);
-    set_gpio_input(g_gpio_cfg.right);
-    set_gpio_input(g_gpio_cfg.a);
-    set_gpio_input(g_gpio_cfg.b);
-    set_gpio_input(g_gpio_cfg.x);
-    set_gpio_input(g_gpio_cfg.y);
-    set_gpio_input(g_gpio_cfg.l);
-    set_gpio_input(g_gpio_cfg.r);
-    set_gpio_input(g_gpio_cfg.start);
-    set_gpio_input(g_gpio_cfg.select);
-    set_gpio_input(g_gpio_cfg.quit);
+    // Configure all assigned pins as inputs and build active-low polling table
+    uint32_t all_pins_mask = 0;
+    add_binding(g_gpio_cfg.up,     SNES_UP_MASK,     &all_pins_mask);
+    add_binding(g_gpio_cfg.down,   SNES_DOWN_MASK,   &all_pins_mask);
+    add_binding(g_gpio_cfg.left,   SNES_LEFT_MASK,   &all_pins_mask);
+    add_binding(g_gpio_cfg.right,  SNES_RIGHT_MASK,  &all_pins_mask);
+    add_binding(g_gpio_cfg.a,      SNES_A_MASK,      &all_pins_mask);
+    add_binding(g_gpio_cfg.b,      SNES_B_MASK,      &all_pins_mask);
+    add_binding(g_gpio_cfg.x,      SNES_X_MASK,      &all_pins_mask);
+    add_binding(g_gpio_cfg.y,      SNES_Y_MASK,      &all_pins_mask);
+    add_binding(g_gpio_cfg.l,      SNES_TL_MASK,     &all_pins_mask);
+    add_binding(g_gpio_cfg.r,      SNES_TR_MASK,     &all_pins_mask);
+    add_binding(g_gpio_cfg.start,  SNES_START_MASK,  &all_pins_mask);
+    add_binding(g_gpio_cfg.select, SNES_SELECT_MASK, &all_pins_mask);
 
-    printf("[GPIO] Direct memory-mapped GPIO input initialized successfully (using /dev/gpiomem).\n");
+    if (g_gpio_cfg.quit >= 0 && g_gpio_cfg.quit < 32) {
+        int reg_idx = g_gpio_cfg.quit / 10;
+        int shift = (g_gpio_cfg.quit % 10) * 3;
+        gpio_mmap_ptr[reg_idx] &= ~(7u << shift);
+        gpio_quit_mask = (1u << g_gpio_cfg.quit);
+        all_pins_mask |= gpio_quit_mask;
+    }
+
+    // Enable BCM2835 internal pull-up resistors for all active button pins
+    // (Belt-and-suspenders alongside /boot/config.txt gpio=...=pu)
+    if (all_pins_mask) {
+        gpio_mmap_ptr[BCM_GPIO_GPPUD] = 2; // 2 = Pull-Up
+        usleep(10);
+        gpio_mmap_ptr[BCM_GPIO_GPPUDCLK0] = all_pins_mask;
+        usleep(10);
+        gpio_mmap_ptr[BCM_GPIO_GPPUD] = 0;
+        gpio_mmap_ptr[BCM_GPIO_GPPUDCLK0] = 0;
+    }
+
+    printf("[GPIO] Direct memory-mapped GPIO input initialized (%s, %d buttons).\n",
+           dev_name, num_gpio_bindings);
 }
 
 uint32_t gpio_buttons_read(int *quit_requested)
@@ -126,33 +169,19 @@ uint32_t gpio_buttons_read(int *quit_requested)
         return 0;
     }
 
-    // GPLEV0 is word offset 13 (byte offset 0x34)
-    uint32_t gplev = gpio_mmap_ptr[13];
+    // Read all 32 GPIO levels in a single bus transaction; active-low (0 = pressed)
+    uint32_t pressed_bits = ~gpio_mmap_ptr[BCM_GPIO_GPLEV0];
     uint32_t val = 0;
 
-    // Active-low: button pressed connects GPIO pin to GND (0 = pressed)
-    #define POLL_PIN(pin_num, mask) \
-        if ((pin_num) >= 0 && (pin_num) < 32 && !(gplev & (1u << (pin_num)))) val |= (mask)
-
-    POLL_PIN(g_gpio_cfg.up,     SNES_UP_MASK);
-    POLL_PIN(g_gpio_cfg.down,   SNES_DOWN_MASK);
-    POLL_PIN(g_gpio_cfg.left,   SNES_LEFT_MASK);
-    POLL_PIN(g_gpio_cfg.right,  SNES_RIGHT_MASK);
-    POLL_PIN(g_gpio_cfg.a,      SNES_A_MASK);
-    POLL_PIN(g_gpio_cfg.b,      SNES_B_MASK);
-    POLL_PIN(g_gpio_cfg.x,      SNES_X_MASK);
-    POLL_PIN(g_gpio_cfg.y,      SNES_Y_MASK);
-    POLL_PIN(g_gpio_cfg.l,      SNES_TL_MASK);
-    POLL_PIN(g_gpio_cfg.r,      SNES_TR_MASK);
-    POLL_PIN(g_gpio_cfg.start,  SNES_START_MASK);
-    POLL_PIN(g_gpio_cfg.select, SNES_SELECT_MASK);
-
-    #undef POLL_PIN
+    for (int i = 0; i < num_gpio_bindings; i++) {
+        if (pressed_bits & gpio_bindings[i].pin_mask) {
+            val |= gpio_bindings[i].snes_mask;
+        }
+    }
 
     if (quit_requested) {
-        if (g_gpio_cfg.quit >= 0 && g_gpio_cfg.quit < 32 && !(gplev & (1u << g_gpio_cfg.quit))) {
-            *quit_requested = 1;
-        } else if ((val & SNES_START_MASK) && (val & SNES_SELECT_MASK)) {
+        if ((gpio_quit_mask && (pressed_bits & gpio_quit_mask)) ||
+            ((val & (SNES_START_MASK | SNES_SELECT_MASK)) == (SNES_START_MASK | SNES_SELECT_MASK))) {
             *quit_requested = 1;
         } else {
             *quit_requested = 0;

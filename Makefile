@@ -95,11 +95,12 @@ $(GUIDEFINES) \
 #-DDEBUGGER
 #-DJOYSTICK_SUPPORT
 
-CFLAGS=$(CCFLAGS)
+CFLAGS=$(filter-out -fpermissive -Wno-write-strings -Wno-narrowing,$(CCFLAGS))
 
 .SUFFIXES: .o .cpp .c .cc .h .m .i .S .asm .obj
 
-LDLIBS = -L/usr/lib/arm-linux-gnueabihf -lbcm_host -lglib-2.0 -lrt -lm -lasound -ljpeg
+GUILIBS = -L/usr/lib/arm-linux-gnueabihf -lbcm_host -lglib-2.0 -lrt -lm -ljpeg
+LDLIBS = $(GUILIBS) -lasound
 
 all: snes9x snes9x.gui
 
@@ -107,13 +108,13 @@ snes9x: $(OBJECTS)
 	$(CC) $(INCLUDES) -o $@ $(OBJECTS) $(EXTRALIBS) $(LDLIBS) -lSDL -lstdc++ -lz -lpthread 
 
 snes9x.gui: unix/frontend.o unix/gpio_buttons.o
-	$(CC) $(INCLUDES) -o $@ unix/frontend.o unix/gpio_buttons.o $(EXTRALIBS) $(LDLIBS) -lSDL -lstdc++ -lz -lpthread 
+	$(CC) $(INCLUDES) -o $@ unix/frontend.o unix/gpio_buttons.o $(EXTRALIBS) $(GUILIBS) -lSDL -lstdc++ -lz -lpthread 
 
 .cpp.o:
 	$(CCC) $(INCLUDES) -c $(CCFLAGS) $*.cpp -o $@
 
 .c.o:
-	$(CC) $(INCLUDES) -c $(CCFLAGS) $*.c -o $@
+	$(CC) $(INCLUDES) -c $(CFLAGS) $*.c -o $@
 
 .cpp.S:
 	$(CCC) $(INCLUDES) -S $(CCFLAGS) $*.cpp -o $@

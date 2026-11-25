@@ -95,7 +95,8 @@ This compiles both:
 
 ## 5. Summary of Optimizations Added
 
-1. **Sub-millisecond GPIO Input:** Reads `GPLEV0` directly from the BCM2835 register map via `/dev/gpiomem` in $< 100 \text{ ns}$.
-2. **CPU Spin-Wait Elimination:** Fixed the busy-wait loop in `S9xSyncSpeed` that previously pegged the Pi Zero CPU at 100%.
-3. **OpenGL Pipeline Optimization:** Removed redundant per-frame `glTexParameteri` texture filter resets in `gles2_DrawQuad`.
-4. **Compiler Tuning:** Targeted `-march=armv6zk -mcpu=arm1176jzf-s -mtune=arm1176jzf-s` for the ARM11 8-stage pipeline.
+1. **Sub-millisecond GPIO Input:** Reads `GPLEV0` directly from the BCM2835 register map via `/dev/gpiomem` (with software internal pull-up setup via `GPPUD`) in $< 100 \text{ ns}$.
+2. **Pure DispmanX Hardware Scaling:** Replaced the legacy EGL/GLES2 backend with direct VideoCore HVS DispmanX scaling, removing all Mesa/EGL incompatibilities on Raspberry Pi OS Bullseye while eliminating 3D pipeline overhead.
+3. **CPU Spin-Wait Elimination:** Replaced the 100% CPU busy-wait loop in `S9xSyncSpeed` with `usleep()` pacing.
+4. **Resilient ALSA Audio:** Added automatic `plughw:0,0` fallback and safe mute fallback if no audio device is available.
+5. **Compiler Tuning:** Targeted `-march=armv6zk -mcpu=arm1176jzf-s -mtune=arm1176jzf-s` for the ARM11 8-stage pipeline.

@@ -1,3 +1,18 @@
+PiSNES-GPIO for Raspberry Pi Zero (Fork of PiSNES by Squid)
+=============================================================
+
+NOTE: See README.md and GPIO_WIRING_AND_BUILD.md for full setup instructions,
+GPIO pinout, /boot/config.txt configuration, and Raspberry Pi OS Bullseye notes.
+
+FORK CHANGES (PiSNES-GPIO):
+  * Replaced EGL/GLES2 renderer with pure DispmanX hardware scaling (works on Bullseye without /opt/vc/lib).
+  * Added direct memory-mapped GPIO button input via /dev/gpiomem + internal pull-ups (GPPUD).
+  * Replaced 100% CPU busy-wait loop in S9xSyncSpeed with usleep() frame pacing.
+  * Added ALSA plughw:0,0 fallback and safe silent fallback when no audio device exists.
+  * Fixed modern GCC narrowing/overflow warnings, scandir free() bug, and joystick bounds checks.
+
+=============================================================
+
 PiSNES for Raspberry Pi by Squid
 ================================
 
