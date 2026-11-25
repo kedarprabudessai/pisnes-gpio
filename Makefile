@@ -35,7 +35,7 @@ OBJECTS=$(CPUOBJ) $(FXOBJ) $(C4OBJ) \
 	memmap.o ppu.o dma.o unix/unix.o \
 	$(SOUNDOBJ) unix/graphics.o dsp1.o \
     snes9x.o snapshot.o data.o globals.o \
-	unix/gles2.o unix/gpio_buttons.o \
+	unix/gpio_buttons.o \
 	$(KREEDOBJ)
 
 ifdef NETPLAY
@@ -99,7 +99,7 @@ CFLAGS=$(CCFLAGS)
 
 .SUFFIXES: .o .cpp .c .cc .h .m .i .S .asm .obj
 
-LDLIBS = -L/opt/vc/lib -L/usr/lib/arm-linux-gnueabihf -lbcm_host -lGLESv2 -lEGL -lglib-2.0 -lrt -lm -lasound -ljpeg -Wl,-rpath=/opt/vc/lib
+LDLIBS = -L/usr/lib/arm-linux-gnueabihf -lbcm_host -lglib-2.0 -lrt -lm -lasound -ljpeg
 
 all: snes9x snes9x.gui
 

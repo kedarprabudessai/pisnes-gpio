@@ -61,17 +61,7 @@
 //sq #include "keydef.h"
 
 #include <bcm_host.h>
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
 #include <assert.h>
-
-#ifndef EGL_DISPMANX_WINDOW_T
-typedef struct {
-   DISPMANX_ELEMENT_HANDLE_T element;
-   int width;
-   int height;
-} EGL_DISPMANX_WINDOW_T;
-#endif
 
 
 #define COUNT(a) (sizeof(a) / sizeof(a[0]))
@@ -81,6 +71,9 @@ DISPMANX_ELEMENT_HANDLE_T dispman_element_bg;
 DISPMANX_DISPLAY_HANDLE_T dispman_display;
 DISPMANX_UPDATE_HANDLE_T dispman_update;
 DISPMANX_RESOURCE_HANDLE_T resource_bg;
+DISPMANX_RESOURCE_HANDLE_T dispman_resource;
+static VC_RECT_T dispman_dst_rect;
+static int dispman_last_height = 0;
 
 //sq SDL_Surface *screen, *gfxscreen;
 SDL_Surface *gfxscreen;
@@ -90,17 +83,25 @@ SDL_Joystick *joy[2];
 uint16 *RGBconvert;
 extern uint32 xs, ys, cl, cs;
 
-void gles2_create(int display_width, int display_height, int bitmap_width, int bitmap_height);
-void gles2_destroy();
-void gles2_draw(short *screen);
-void gles2_palette_changed();
-
-EGLDisplay display = NULL;
-EGLSurface surface = NULL;
-static EGLContext context = NULL;
-static EGL_DISPMANX_WINDOW_T nativewindow;
-
 uint32_t display_width, display_height;
+
+void dispmanx_draw(short *scr, int width, int height)
+{
+	VC_RECT_T write_rect;
+	vc_dispmanx_rect_set(&write_rect, 0, 0, width, height);
+	vc_dispmanx_resource_write_data(dispman_resource, VC_IMAGE_RGB565, width * 2, scr, &write_rect);
+
+	DISPMANX_UPDATE_HANDLE_T update = vc_dispmanx_update_start(0);
+	if (height != dispman_last_height) {
+		VC_RECT_T src_rect;
+		vc_dispmanx_rect_set(&src_rect, 0, 0, width << 16, height << 16);
+		vc_dispmanx_element_change_attributes(update, dispman_element,
+			1 << 3 /* CHANGE_SRC_RECT */, 0, 0, NULL, &src_rect, 0, (DISPMANX_TRANSFORM_T)0);
+		dispman_last_height = height;
+	}
+	vc_dispmanx_element_modified(update, dispman_element, &dispman_dst_rect);
+	vc_dispmanx_update_submit_sync(update);
+}
 
 #ifndef _ZAURUS
 int S9xMinCommandLineArgs ()
@@ -194,105 +195,72 @@ void S9xInitDisplay (int height)
 
 
     {
-    	int ret;
-    
     	VC_RECT_T dst_rect;
     	VC_RECT_T src_rect;
-    
-    	// get an EGL display connection
-    	display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    	assert(display != EGL_NO_DISPLAY);
-    
-    	// initialize the EGL display connection
-    	EGLBoolean result = eglInitialize(display, NULL, NULL);
-    	if (result == EGL_FALSE) {
-    		printf("[EGL] eglInitialize failed! EGL error: 0x%04x\n", eglGetError());
-    		printf("[EGL] Check that 'gpu_mem=128' is in /boot/config.txt and 'dtoverlay=vc4-kms-v3d' is disabled.\n");
-    	}
-    	assert(EGL_FALSE != result);
-    
-    	// get an appropriate EGL frame buffer configuration
-    	EGLint num_config;
-    	EGLConfig config;
-    	static const EGLint attribute_list[] =
-    	{
-    	    EGL_RED_SIZE, 8,
-    	    EGL_GREEN_SIZE, 8,
-    	    EGL_BLUE_SIZE, 8,
-    	    EGL_ALPHA_SIZE, 8,
-    	    EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-    	    EGL_NONE
-    	};
-    	result = eglChooseConfig(display, attribute_list, &config, 1, &num_config);
-    	assert(EGL_FALSE != result);
-    
-    	result = eglBindAPI(EGL_OPENGL_ES_API);
-    	assert(EGL_FALSE != result);
-    
-    	// create an EGL rendering context
-    	static const EGLint context_attributes[] =
-    	{
-    	    EGL_CONTEXT_CLIENT_VERSION, 2,
-    	    EGL_NONE
-    	};
-    	context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attributes);
-    	assert(context != EGL_NO_CONTEXT);
-    
-    	// create an EGL window surface
+
     	int32_t success = graphics_get_display_size(0, &display_width, &display_height);
     	assert(success >= 0);
-    
-    	vc_dispmanx_rect_set( &src_rect, 0, 0, display_width << 16, display_height << 16);
-    	vc_dispmanx_rect_set( &dst_rect, 0, 0, display_width, display_height);
-    
+
     	dispman_display = vc_dispmanx_display_open(0);
     	dispman_update = vc_dispmanx_update_start(0);
-    	dispman_element = vc_dispmanx_element_add(
-                                dispman_update, 
+
+    	// Black background layer (small 16x16 resource scaled to full screen)
+    	uint32_t vc_image_ptr;
+    	resource_bg = vc_dispmanx_resource_create(VC_IMAGE_RGB565, 16, 16, &vc_image_ptr);
+    	uint16_t black_buf[16 * 16] = {0};
+    	vc_dispmanx_rect_set(&dst_rect, 0, 0, 16, 16);
+    	vc_dispmanx_resource_write_data(resource_bg, VC_IMAGE_RGB565, 16 * 2, black_buf, &dst_rect);
+
+    	vc_dispmanx_rect_set(&src_rect, 0, 0, 16 << 16, 16 << 16);
+    	vc_dispmanx_rect_set(&dst_rect, 0, 0, display_width, display_height);
+    	dispman_element_bg = vc_dispmanx_element_add(
+                                dispman_update,
                                 dispman_display,
-    	  				        10, //Must be above frontend GUI
-                                &dst_rect, 
-                                0,  //No resource allocated for EGL window
-                                &src_rect, 
-    					        DISPMANX_PROTECTION_NONE, 
+                                9, // one below rendering element
+                                &dst_rect,
+                                resource_bg,
+                                &src_rect,
+                                DISPMANX_PROTECTION_NONE,
                                 0, 0,
                                 (DISPMANX_TRANSFORM_T) 0);
-     
-    	//Create a blank background for the whole screen, make sure width is divisible by 32!
-        //Make size of element exact size of display to avoid expensive stretching
-    	uint32_t vc_image_ptr;
-    	resource_bg = vc_dispmanx_resource_create(VC_IMAGE_RGB565, display_width, display_height, &vc_image_ptr);
-    
-    	vc_dispmanx_rect_set( &src_rect, 0, 0, display_width << 16, display_height << 16);
-    	vc_dispmanx_rect_set( &dst_rect, 0, 0, display_width, display_height );
-    
-    	dispman_element_bg = vc_dispmanx_element_add(  
-                                dispman_update,
-    	                        dispman_display,
-    	                        9, //one below rendering element
-    	                        &dst_rect,
-    	                        resource_bg,
-    	                        &src_rect,
-    	                        DISPMANX_PROTECTION_NONE,
-    	                        0, 0,
-                                (DISPMANX_TRANSFORM_T) 0);
-    
-    	nativewindow.element = dispman_element;
-    	nativewindow.width = display_width;
-    	nativewindow.height = display_height;
-    	vc_dispmanx_update_submit_sync(dispman_update);
-    
-    	surface = eglCreateWindowSurface(display, config, &nativewindow, NULL);
-    	assert(surface != EGL_NO_SURFACE);
-    
-    	// connect the context to the surface
-    	result = eglMakeCurrent(display, surface, surface, context);
-    	assert(EGL_FALSE != result);
-    
-    //sqdebug   eglSwapInterval(display, 0);
-    
-    	gles2_create(display_width, display_height, width, height);
 
+    	// Game screen resource (256x240 RGB565) scaled in hardware by VideoCore HVS
+    	dispman_resource = vc_dispmanx_resource_create(VC_IMAGE_RGB565, 256, 240, &vc_image_ptr);
+    	dispman_last_height = height;
+
+    	uint32_t target_w = display_width;
+    	uint32_t target_h = display_height;
+    	if (Settings.DisplayBorder > 0 && Settings.DisplayBorder < (int)display_width) {
+    		float zoom = (float)(display_width - Settings.DisplayBorder) / (float)display_width;
+    		target_w = (uint32_t)(display_width * zoom);
+    		target_h = (uint32_t)(display_height * zoom);
+    	}
+    	if (Settings.MaintainAspectRatio) {
+    		uint32_t aspect_w = (target_h * 4) / 3;
+    		if (aspect_w <= target_w) {
+    			target_w = aspect_w;
+    		} else {
+    			target_h = (target_w * 3) / 4;
+    		}
+    	}
+    	uint32_t dst_x = (display_width - target_w) / 2;
+    	uint32_t dst_y = (display_height - target_h) / 2;
+
+    	vc_dispmanx_rect_set(&src_rect, 0, 0, width << 16, height << 16);
+    	vc_dispmanx_rect_set(&dispman_dst_rect, dst_x, dst_y, target_w, target_h);
+
+    	dispman_element = vc_dispmanx_element_add(
+                                dispman_update,
+                                dispman_display,
+                                10, // Must be above frontend GUI
+                                &dispman_dst_rect,
+                                dispman_resource,
+                                &src_rect,
+                                DISPMANX_PROTECTION_NONE,
+                                0, 0,
+                                (DISPMANX_TRANSFORM_T) 0);
+
+    	vc_dispmanx_update_submit_sync(dispman_update);
     }
 
 }
@@ -311,17 +279,11 @@ void S9xDeinitDisplay ()
 
 	SDL_Quit();
 
-    gles2_destroy();
-    // Release OpenGL resources
-    eglMakeCurrent( display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT );
-    eglDestroySurface( display, surface );
-    eglDestroyContext( display, context );
-    eglTerminate( display );
-
 	dispman_update = vc_dispmanx_update_start( 0 );
 	ret = vc_dispmanx_element_remove( dispman_update, dispman_element );
 	ret = vc_dispmanx_element_remove( dispman_update, dispman_element_bg );
 	ret = vc_dispmanx_update_submit_sync( dispman_update );
+	ret = vc_dispmanx_resource_delete( dispman_resource );
 	ret = vc_dispmanx_resource_delete( resource_bg );
 	ret = vc_dispmanx_display_close( dispman_display );
 

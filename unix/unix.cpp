@@ -90,8 +90,7 @@ pthread_mutex_t mutex;
 #include <alsa/asoundlib.h>
 #include <bcm_host.h>
 
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
+// Pure DispmanX rendering (no EGL/GLES2 required)
 
 typedef struct alsa
 {
@@ -140,10 +139,7 @@ static uint32 ffc = 0;
 bool8_32 nso = FALSE, vga = FALSE;
 uint32 xs = 256, ys = 240, cl = 0, cs = 0, mfs = 10;
 
-void gles2_draw(short *screen, int width, int height);
-
-extern EGLDisplay display;
-extern EGLSurface surface;
+void dispmanx_draw(short *screen, int width, int height);
 
 char *rom_filename = NULL;
 char *snapshot_filename = NULL;
@@ -685,9 +681,8 @@ bool8_32 S9xDeinitUpdate (int Width, int Height)
 	if (GFX.InfoString)
 	    S9xDisplayString (GFX.InfoString, (uint8 *)screen, 512);
 
-	//Draw to the screen
-    gles2_draw(screen, 256, Height);
-    eglSwapBuffers(display, surface);
+	//Draw to the screen using hardware DispmanX scaler
+    dispmanx_draw((short *)screen, 256, Height);
 
 	return(TRUE);
 }
