@@ -303,30 +303,30 @@ static void game_list_view(int *pos) {
 		*pos=0;
 					   
 	/* Set View Pos */
-	if (*pos<10) {
+	if (*pos<8) {
 		view_pos=0;
 	} else {
-		if (*pos>game_num_avail-11) {
-			view_pos=game_num_avail-21;
+		if (*pos>game_num_avail-8) {
+			view_pos=game_num_avail-16;
 			view_pos=(view_pos<0?0:view_pos);
 		} else {
-			view_pos=*pos-10;
+			view_pos=*pos-8;
 		}
 	}
 
 	/* Show List */
 	for (i=0;i<game_num_avail;i++) {
-			if (aux_pos>=view_pos && aux_pos<=view_pos+28) {
+			if (aux_pos>=view_pos && aux_pos<=view_pos+15) {
 
 				if (aux_pos==*pos) {
-					fe_gamelist_text_out( screen_x, screen_y, fe_drivers[i].name, color16(0,150,255));
+					fe_gamelist_text_out( screen_x+4, screen_y, fe_drivers[i].name, color16(0,150,255));
 					fe_gamelist_text_out( screen_x-5, screen_y,">",color16(255,255,255) );
 				}
 				else {
-					fe_gamelist_text_out( screen_x, screen_y, fe_drivers[i].name, color16(255,255,255));
+					fe_gamelist_text_out( screen_x+4, screen_y, fe_drivers[i].name, color16(255,255,255));
 				}
 				
-				screen_y+=6;
+				screen_y+=10;
 			}
 			aux_pos++;
 	}
@@ -980,31 +980,35 @@ static unsigned char fontdata8x8[] =
 
 static void fe_text(unsigned short *screen, int x, int y, char *text, int color)
 {
-	unsigned int i,l;
-	screen=screen+(x*2)+(y*2)*640;
+	unsigned int i, l, c;
+	screen = screen + (x * 2) + (y * 2) * 640;
 
-	for (i=0;i<strlen(text);i++) {
-		
-		for (l=0;l<8;l++) {
-			screen[l*640+0]=(fontdata8x8[((text[i])*8)+l]&0x80)?color:screen[l*640+0];
-			screen[l*640+1]=(fontdata8x8[((text[i])*8)+l]&0x40)?color:screen[l*640+1];
-			screen[l*640+2]=(fontdata8x8[((text[i])*8)+l]&0x20)?color:screen[l*640+2];
-			screen[l*640+3]=(fontdata8x8[((text[i])*8)+l]&0x10)?color:screen[l*640+3];
-			screen[l*640+4]=(fontdata8x8[((text[i])*8)+l]&0x08)?color:screen[l*640+4];
-			screen[l*640+5]=(fontdata8x8[((text[i])*8)+l]&0x04)?color:screen[l*640+5];
-			screen[l*640+6]=(fontdata8x8[((text[i])*8)+l]&0x02)?color:screen[l*640+6];
-			screen[l*640+7]=(fontdata8x8[((text[i])*8)+l]&0x01)?color:screen[l*640+7];
+	for (i = 0; i < strlen(text); i++) {
+		const unsigned char *glyph = &fontdata8x8[((unsigned char)text[i]) * 8];
+		for (l = 0; l < 8; l++) {
+			unsigned char row = glyph[l];
+			unsigned short *row0 = screen + (l * 2) * 640;
+			unsigned short *row1 = row0 + 640;
+			for (c = 0; c < 8; c++) {
+				if (row & (0x80 >> c)) {
+					int px = c * 2;
+					row0[px] = color;
+					row0[px + 1] = color;
+					row1[px] = color;
+					row1[px + 1] = color;
+				}
+			}
 		}
-		screen+=8;
-	} 
+		screen += 16;
+	}
 }
 
 static void fe_gamelist_text_out(int x, int y, char *eltexto, int color)
 {
-	char texto[36];
-	strncpy(texto,eltexto,35);
-	texto[35]=0;
-	fe_text(fe_screen,x,y,texto,color);
+	char texto[20];
+	strncpy(texto, eltexto, 19);
+	texto[19] = 0;
+	fe_text(fe_screen, x, y, texto, color);
 }
 
 static void fe_gamelist_text_out_fmt(int x, int y, char* fmt, ...)
