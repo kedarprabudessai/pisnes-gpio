@@ -437,10 +437,8 @@ static uint32 fe_ReadJoypad (int which1)
 {
 	uint32 val=0x80000000;
 
-	int gpio_quit = 0;
 	if (g_gpio_cfg.enabled) {
-		val |= gpio_buttons_read(&gpio_quit);
-		if (gpio_quit) fe_exit();
+		val |= gpio_buttons_read(NULL);
 	}
 
 	if (keyssnes[sfc_key[A_1]] == SDL_PRESSED || joy_buttons[sfc_joy[A_1]])		val |= SNES_A_MASK;
@@ -458,9 +456,9 @@ static uint32 fe_ReadJoypad (int which1)
     if (joy_buttons[sfc_joy[UP_1]]) val |= SNES_UP_MASK;
     if (joy_buttons[sfc_joy[DOWN_1]])   val |= SNES_DOWN_MASK;
 
-	if (keyssnes[sfc_key[QUIT]] == SDL_PRESSED || joy_buttons[sfc_joy[QUIT]]) fe_exit();
-
-	if (val&SNES_SELECT_MASK && val&SNES_START_MASK) fe_exit();
+	// Only allow keyboard QUIT (Esc) to exit the GUI to shell so handheld buttons
+	// (START+SELECT / QUIT) never strand the user in terminal without a keyboard.
+	if (keyssnes[sfc_key[QUIT]] == SDL_PRESSED) fe_exit();
 
 	return(val);
 }
@@ -588,6 +586,15 @@ static void select_game(char *game)
 
 	/* Clean screen */
 	frontend_display(-1);
+
+	/* Draw list once and wait for any held launch buttons from previous game exit to be released */
+	game_list_view(&last_game_selected);
+	frontend_display(last_game_selected);
+	do {
+		usleep(20000);
+		fe_ProcessEvents();
+		Joypads = fe_ReadJoypad(0);
+	} while (Joypads & (SNES_START_MASK | SNES_B_MASK | SNES_A_MASK));
 
 	/* Wait until user selects a game */
 	while(1)
