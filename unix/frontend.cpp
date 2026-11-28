@@ -303,30 +303,30 @@ static void game_list_view(int *pos) {
 		*pos=0;
 					   
 	/* Set View Pos */
-	if (*pos<8) {
+	if (*pos<10) {
 		view_pos=0;
 	} else {
-		if (*pos>game_num_avail-8) {
-			view_pos=game_num_avail-16;
+		if (*pos>game_num_avail-10) {
+			view_pos=game_num_avail-20;
 			view_pos=(view_pos<0?0:view_pos);
 		} else {
-			view_pos=*pos-8;
+			view_pos=*pos-10;
 		}
 	}
 
 	/* Show List */
 	for (i=0;i<game_num_avail;i++) {
-			if (aux_pos>=view_pos && aux_pos<=view_pos+15) {
+			if (aux_pos>=view_pos && aux_pos<=view_pos+19) {
 
 				if (aux_pos==*pos) {
-					fe_gamelist_text_out( screen_x+4, screen_y, fe_drivers[i].name, color16(0,150,255));
+					fe_gamelist_text_out( screen_x+3, screen_y, fe_drivers[i].name, color16(0,150,255));
 					fe_gamelist_text_out( screen_x-5, screen_y,">",color16(255,255,255) );
 				}
 				else {
-					fe_gamelist_text_out( screen_x+4, screen_y, fe_drivers[i].name, color16(255,255,255));
+					fe_gamelist_text_out( screen_x+3, screen_y, fe_drivers[i].name, color16(255,255,255));
 				}
 				
-				screen_y+=10;
+				screen_y+=8;
 			}
 			aux_pos++;
 	}
@@ -985,29 +985,24 @@ static void fe_text(unsigned short *screen, int x, int y, char *text, int color)
 
 	for (i = 0; i < strlen(text); i++) {
 		const unsigned char *glyph = &fontdata8x8[((unsigned char)text[i]) * 8];
-		for (l = 0; l < 8; l++) {
-			unsigned char row = glyph[l];
-			unsigned short *row0 = screen + (l * 2) * 640;
-			unsigned short *row1 = row0 + 640;
-			for (c = 0; c < 8; c++) {
-				if (row & (0x80 >> c)) {
-					int px = c * 2;
-					row0[px] = color;
-					row0[px + 1] = color;
-					row1[px] = color;
-					row1[px + 1] = color;
+		for (l = 0; l < 12; l++) {
+			unsigned char row = glyph[(l * 8) / 12];
+			unsigned short *dst = screen + l * 640;
+			for (c = 0; c < 12; c++) {
+				if (row & (0x80 >> ((c * 8) / 12))) {
+					dst[c] = color;
 				}
 			}
 		}
-		screen += 16;
+		screen += 12;
 	}
 }
 
 static void fe_gamelist_text_out(int x, int y, char *eltexto, int color)
 {
-	char texto[20];
-	strncpy(texto, eltexto, 19);
-	texto[19] = 0;
+	char texto[26];
+	strncpy(texto, eltexto, 25);
+	texto[25] = 0;
 	fe_text(fe_screen, x, y, texto, color);
 }
 
